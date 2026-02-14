@@ -1,7 +1,14 @@
 #!/usr/bin/awk -f
 # Filters Claude stream-json output into human-readable progress
+# Only shows: tool calls, assistant text, and result summary
+# Everything else (system events, tool results, raw JSON) is suppressed
 
-/"tool_use"/ {
+# Skip system messages and user/tool-result messages immediately
+/"type":"system"/ { next }
+/"type":"user"/ { next }
+
+# Assistant tool use — show tool name + key input
+/"type":"tool_use"/ {
   if (match($0, /"name":"([^"]*)"/, m)) {
     tool = m[1]
     if (tool == "Read" || tool == "Edit" || tool == "Write") {
@@ -28,18 +35,22 @@
       printf "  [%s]\n", tool
     }
   }
+  fflush()
   next
 }
 
+# Assistant text — show Claude's words
 /"type":"assistant"/ && /"type":"text"/ {
   if (match($0, /"text":"([^"]*)"/, t)) {
     gsub(/\\n/, "\n", t[1])
     if (t[1] != "") print t[1]
   }
+  fflush()
   next
 }
 
-/"type":"result"/ {
+# Final result — show summary
+/"type":"result","subtype"/ {
   turns = ""; dur = ""; cost = ""
   if (match($0, /"num_turns":([0-9]+)/, n)) turns = n[1]
   if (match($0, /"duration_ms":([0-9]+)/, d)) dur = d[1]
@@ -48,4 +59,9 @@
     secs = int(dur / 1000)
     printf "  -- Done: %s turns, %ds, $%s --\n", turns, secs, cost
   }
+  fflush()
+  next
 }
+
+# Catch-all: suppress everything else (no raw JSON leaks)
+{ next }
