@@ -80,10 +80,17 @@ ITER_LOG=""
 
 # Cleanup temp file on exit/interrupt
 cleanup() { rm -f "$ITER_LOG"; }
-trap cleanup EXIT INT TERM
+abort()   { cleanup; log "\n${RED}  Interrupted by user${NC}"; exit 130; }
+trap cleanup EXIT
+trap abort INT TERM
 
-i=1
-while [ "$i" -le "$MAX_ITERATIONS" ]; do
+# Signal exit codes used by run_iteration to communicate completion signals
+# These are above 128 to avoid collision with normal exit codes
+EXIT_MILESTONE_COMPLETE=200
+EXIT_BLOCKED=201
+
+# Core iteration logic — runs with set +e, errors are caught by caller
+run_iteration() {
   log "${YELLOW}──────────────────────────────────────────────────────${NC}"
   log "${YELLOW}  Iteration $i/$MAX_ITERATIONS${NC}"
   log "${YELLOW}──────────────────────────────────────────────────────${NC}"
@@ -95,7 +102,6 @@ while [ "$i" -le "$MAX_ITERATIONS" ]; do
   ITER_LOG=$(mktemp)
 
   log "  Spawning claude (timeout: ${ITER_TIMEOUT}s)..."
-  set +e
   timeout --kill-after=30 "$ITER_TIMEOUT" claude \
     --dangerously-skip-permissions \
     --print \
@@ -103,7 +109,6 @@ while [ "$i" -le "$MAX_ITERATIONS" ]; do
     --verbose \
     < "$SCRIPT_DIR/PROMPT.md" 2>&1 | tee "$ITER_LOG" | format_stream
   CLAUDE_EXIT=${PIPESTATUS[0]}
-  set -e
 
   # Extract final result text from stream-json for signal detection
   # The "type":"result" line contains the complete output in "result" field
@@ -131,8 +136,7 @@ while [ "$i" -le "$MAX_ITERATIONS" ]; do
       sleep 1800
       EMPTY_COUNT=0
     fi
-    i=$((i + 1))
-    continue
+    return 0
   fi
   EMPTY_COUNT=0
 
@@ -143,8 +147,9 @@ while [ "$i" -le "$MAX_ITERATIONS" ]; do
     log "${YELLOW}  Rate limited. ${RESET_INFO:-Waiting 30 minutes...}${NC}"
     log "${YELLOW}  Sleeping until limit resets...${NC}"
     sleep 1800  # 30 minutes
-    # Do NOT increment i — retry the same iteration
-    continue
+    # Signal caller: do NOT increment i — retry the same iteration
+    RETRY_ITERATION=1
+    return 0
   fi
 
   # Count commits
@@ -163,7 +168,7 @@ while [ "$i" -le "$MAX_ITERATIONS" ]; do
     log "${GREEN}  MILESTONE COMPLETE${NC}"
     log "${GREEN}  Iterations: $i | Commits: $TOTAL_COMMITS | Phases: $COMPLETED_PHASES${NC}"
     log "${GREEN}══════════════════════════════════════════════════════════${NC}"
-    exit 0
+    return $EXIT_MILESTONE_COMPLETE
   fi
 
   if echo "$OUTPUT" | grep -q "<signal>PHASE_COMPLETE</signal>"; then
@@ -177,12 +182,39 @@ while [ "$i" -le "$MAX_ITERATIONS" ]; do
     log "${RED}  BLOCKED - Check progress.txt for details${NC}"
     log "${RED}  Iterations: $i | Commits: $TOTAL_COMMITS${NC}"
     log "${RED}══════════════════════════════════════════════════════════${NC}"
-    exit 1
+    return $EXIT_BLOCKED
   fi
 
   # Warn if no signal was detected at all
   if ! echo "$OUTPUT" | grep -q "<signal>.*</signal>"; then
     log "${YELLOW}  WARNING: No signal detected in output${NC}"
+  fi
+
+  return 0
+}
+
+# Disable strict error mode for the main loop — errors are handled explicitly
+set +eo pipefail
+
+i=1
+while [ "$i" -le "$MAX_ITERATIONS" ]; do
+  RETRY_ITERATION=0
+
+  run_iteration
+  ITER_EXIT=$?
+
+  # Handle completion signals from run_iteration
+  if [ "$ITER_EXIT" -eq "$EXIT_MILESTONE_COMPLETE" ]; then
+    exit 0
+  elif [ "$ITER_EXIT" -eq "$EXIT_BLOCKED" ]; then
+    exit 1
+  elif [ "$ITER_EXIT" -ne 0 ]; then
+    log "${RED}  ERROR: Iteration $i crashed (exit $ITER_EXIT), continuing...${NC}"
+  fi
+
+  # Rate limit: retry same iteration
+  if [ "$RETRY_ITERATION" -eq 1 ]; then
+    continue
   fi
 
   # Sleep before next iteration
