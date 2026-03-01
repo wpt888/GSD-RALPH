@@ -22,7 +22,7 @@ Each iteration spawns a fresh Claude with no memory of prior iterations. Inter-i
 3. `progress.txt` — Learnings appended by each iteration (created in the user's project)
 4. `gsd-loop.log` — Full output log (created in the user's project)
 
-The lifecycle per phase: `plan → execute → advance to next phase`. PROMPT.md explicitly forbids interactive GSD commands (`/gsd:discuss-phase`, `/gsd:verify-work`, `/gsd:progress`) because they require human input and would hang `--print` mode.
+The lifecycle per phase: `plan → execute → advance to next phase`. After all phases complete: `audit-milestone → plan-milestone-gaps (if gaps found) → milestone complete`. PROMPT.md explicitly forbids interactive GSD commands (`/gsd:discuss-phase`, `/gsd:verify-work`, `/gsd:progress`) because they require human input and would hang `--print` mode.
 
 ## Signal Protocol
 

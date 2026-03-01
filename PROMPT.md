@@ -20,14 +20,17 @@ Based on STATE.md, determine the phase number N and run the EXACT command:
 - If the phase has NO `*-PLAN.md` files in `.planning/phases/`: Run `/gsd:plan-phase N`
 - If the phase HAS `*-PLAN.md` files but NO matching `*-SUMMARY.md` files: Run `/gsd:execute-phase N`
 - If the phase has all plans executed (matching summaries): Update STATE.md to phase N+1, then STOP
-- If all phases are complete: Output MILESTONE_COMPLETE signal
+- If all phases are complete AND no audit has been run yet: Run `/gsd:audit-milestone`
+- If audit found gaps (check `.planning/AUDIT.md` for gap findings): Run `/gsd:plan-milestone-gaps`
+  - This creates new phases — output `PHASE_STEP_DONE` so the loop continues with the new phases
+- If all phases are complete AND audit passed clean (no gaps): Output MILESTONE_COMPLETE signal
 
 FORBIDDEN COMMANDS (these wait for human input and will hang):
 - `/gsd:discuss-phase` — NEVER use this
 - `/gsd:verify-work` — NEVER use this
 - `/gsd:progress` — NEVER use this
 
-ONLY use `/gsd:plan-phase N` or `/gsd:execute-phase N`. Nothing else.
+ONLY use `/gsd:plan-phase N`, `/gsd:execute-phase N`, `/gsd:audit-milestone`, or `/gsd:plan-milestone-gaps`.
 
 ## Step 3: Quality Check
 
