@@ -136,6 +136,8 @@ run_iteration() {
       sleep 1800
       EMPTY_COUNT=0
     fi
+    # Don't burn an iteration on empty output — retry the same one
+    RETRY_ITERATION=1
     return 0
   fi
   EMPTY_COUNT=0

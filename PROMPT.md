@@ -13,24 +13,28 @@ Read these files to understand where the project is:
 
 ## Step 2: Determine Next Action
 
-Based on STATE.md and ROADMAP.md, determine which step is needed:
+Based on STATE.md and ROADMAP.md, determine the phase number N and run the EXACT command:
 
-Based on STATE.md, determine the phase number N and run the EXACT command:
-
+### Phase execution (repeat for each phase):
 - If the phase has NO `*-PLAN.md` files in `.planning/phases/`: Run `/gsd:plan-phase N`
 - If the phase HAS `*-PLAN.md` files but NO matching `*-SUMMARY.md` files: Run `/gsd:execute-phase N`
 - If the phase has all plans executed (matching summaries): Update STATE.md to phase N+1, then STOP
-- If all phases are complete AND no audit has been run yet: Run `/gsd:audit-milestone`
-- If audit found gaps (check `.planning/AUDIT.md` for gap findings): Run `/gsd:plan-milestone-gaps`
-  - This creates new phases — output `PHASE_STEP_DONE` so the loop continues with the new phases
-- If all phases are complete AND audit passed clean (no gaps): Output MILESTONE_COMPLETE signal
+
+### Post-phase lifecycle (after ALL phases in ROADMAP.md are complete):
+
+1. **Audit**: If no audit file exists (check for `.planning/v*-MILESTONE-AUDIT.md`): Run `/gsd:audit-milestone`
+2. **Evaluate audit result** — read the YAML frontmatter `status:` field in `.planning/v*-MILESTONE-AUDIT.md`:
+   - `gaps_found` → Run `/gsd:plan-milestone-gaps` (this creates new phases, then output PHASE_STEP_DONE so the loop continues executing them)
+   - `tech_debt` → Run `/gsd:plan-milestone-gaps` (treat tech debt as gaps to close)
+   - `passed` → Run `/gsd:complete-milestone` to archive, tag, and finalize. Then output MILESTONE_COMPLETE signal.
+3. **Re-audit loop**: After gap closure phases are all executed, DELETE the old audit file (`rm .planning/v*-MILESTONE-AUDIT.md`) and re-run `/gsd:audit-milestone` to verify gaps are truly closed. Repeat until audit passes.
 
 FORBIDDEN COMMANDS (these wait for human input and will hang):
 - `/gsd:discuss-phase` — NEVER use this
 - `/gsd:verify-work` — NEVER use this
 - `/gsd:progress` — NEVER use this
 
-ONLY use `/gsd:plan-phase N`, `/gsd:execute-phase N`, `/gsd:audit-milestone`, or `/gsd:plan-milestone-gaps`.
+ONLY use `/gsd:plan-phase N`, `/gsd:execute-phase N`, `/gsd:audit-milestone`, `/gsd:plan-milestone-gaps`, or `/gsd:complete-milestone`.
 
 ## Step 3: Quality Check
 
